@@ -9,71 +9,45 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read   # No OIDC needed for Service Principal JSON
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Azure Login (Service Principal)
+      # ✅ Login using your single JSON secret
+      - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: |
-            {
-              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.ARM_TENANT_ID }}",
-              "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
-              "resourceManagerEndpointUrl": "https://management.azure.com/",
-              "managementEndpointUrl": "https://management.core.windows.net/"
-            }
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # ✅ Setup Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.6.0'
 
+      # ✅ Confirm the login context (optional but useful for debugging)
       - name: Verify Azure Login
         run: az account show
 
+      # ✅ Initialize Terraform
       - name: Terraform Init
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         run: terraform init
 
+      # ✅ Validate Terraform configuration
       - name: Terraform Validate
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         run: terraform validate
 
+      # ✅ Plan the Terraform deployment
       - name: Terraform Plan
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         run: terraform plan -out=tfplan
 
+      # ✅ Apply Terraform plan (deploy infra)
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         run: terraform apply -auto-approve tfplan
 
+      # ✅ Display output values (e.g., website URL)
       - name: Show Terraform Outputs
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         run: terraform output
