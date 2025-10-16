@@ -2,22 +2,23 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">=3.100.0"
+      version = ">=3.102.0"
     }
   }
+  required_version = ">=1.5.0"
 }
 
 provider "azurerm" {
   features {}
 }
 
-# Resource Group
+# ------------------  RESOURCES  ------------------
+
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
-# Storage Account
 resource "azurerm_storage_account" "storage" {
   name                     = var.storage_account_name
   resource_group_name      = azurerm_resource_group.rg.name
@@ -26,15 +27,14 @@ resource "azurerm_storage_account" "storage" {
   account_replication_type = "LRS"
 }
 
-# Static Website (new resource)
+# ✅ Correct static-website resource
 resource "azurerm_storage_account_static_website" "static_site" {
-  resource_group_name  = azurerm_resource_group.rg.name
-  storage_account_name = azurerm_storage_account.storage.name
-  index_document       = "index.html"
-  error_404_document   = "404.html"
+  storage_account_id = azurerm_storage_account.storage.id
+  index_document     = "index.html"
+  error_404_document = "404.html"
 }
 
-# CDN Profile & Endpoint
+# CDN
 resource "azurerm_cdn_profile" "cdn_profile" {
   name                = "${var.prefix}-cdn-profile"
   resource_group_name = azurerm_resource_group.rg.name
@@ -53,3 +53,5 @@ resource "azurerm_cdn_endpoint" "cdn_endpoint" {
     host_name = azurerm_storage_account.storage.primary_blob_host
   }
 }
+
+
