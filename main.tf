@@ -2,7 +2,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">=3.102.0"
+      version = ">=3.90.0"
     }
   }
   required_version = ">=1.5.0"
@@ -12,13 +12,13 @@ provider "azurerm" {
   features {}
 }
 
-# ------------------  RESOURCES  ------------------
-
+# Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
+# Storage Account for Static Website
 resource "azurerm_storage_account" "storage" {
   name                     = var.storage_account_name
   resource_group_name      = azurerm_resource_group.rg.name
@@ -27,63 +27,55 @@ resource "azurerm_storage_account" "storage" {
   account_replication_type = "LRS"
 }
 
-# ✅ Correct static-website resource
 resource "azurerm_storage_account_static_website" "static_site" {
   storage_account_id = azurerm_storage_account.storage.id
   index_document     = "index.html"
   error_404_document = "404.html"
 }
 
-# ---------------- FRONT DOOR (replaces CDN) ----------------
-
-resource "azurerm_frontdoor" "fd" {
-  name                = "${var.prefix}-frontdoor"
+# ✅ Modern CDN Front Door setup
+resource "azurerm_cdn_frontdoor_profile" "fd_profile" {
+  name                = "${var.prefix}-fd-profile"
   resource_group_name = azurerm_resource_group.rg.name
-  enforce_backend_pools_certificate_name_check = false
-
-  frontend_endpoint {
-    name                              = "${var.prefix}-frontend"
-    host_name                         = "${var.prefix}-frontdoor.azurefd.net"
-    custom_https_provisioning_enabled = false
-  }
-
-  backend_pool {
-    name = "storage-backend"
-
-    backend {
-      host_header = azurerm_storage_account.storage.primary_web_host
-      address     = azurerm_storage_account.storage.primary_web_host
-      http_port   = 80
-      https_port  = 443
-      weight      = 50
-      priority    = 1
-    }
-
-    load_balancing_name = "lb"
-    health_probe_name   = "hp"
-  }
-
-  backend_pool_load_balancing {
-    name = "lb"
-  }
-
-  backend_pool_health_probe {
-    name = "hp"
-    path = "/"
-  }
-
-  routing_rule {
-    name               = "route1"
-    accepted_protocols  = ["Http", "Https"]
-    patterns_to_match   = ["/*"]
-    frontend_endpoints  = ["${var.prefix}-frontend"]
-    forwarding_configuration {
-      forwarding_protocol = "MatchRequest"
-      backend_pool_name   = "storage-backend"
-    }
-  }
+  sku_name            = "Standard_AzureFrontDoor"
 }
 
+resource "azurerm_cdn_frontdoor_origin_group" "fd_origin_group" {
+  name                     = "${var.prefix}-origin-group"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd_profile.id
+  session_affinity_enabled = false
+}
+
+resource "azurerm_cdn_frontdoor_origin" "fd_origin" {
+  name                          = "${var.prefix}-origin"
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.fd_origin_group.id
+  host_name                     = azurerm_storage_account.storage.primary_web_host
+  http_port                     = 80
+  https_port                    = 443
+  origin_host_header            = azurerm_storage_account.storage.primary_web_host
+}
+
+resource "azurerm_cdn_frontdoor_endpoint" "fd_endpoint" {
+  name                     = "${var.prefix}-endpoint"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.fd_profile.id
+}
+
+resource "azurerm_cdn_frontdoor_route" "fd_route" {
+  name                          = "${var.prefix}-route"
+  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.fd_endpoint.id
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.fd_origin_group.id
+  supported_protocols           = ["Http", "Https"]
+  patterns_to_match             = ["/*"]
+  https_redirect_enabled        = true
+  forwarding_protocol           = "MatchRequest"
+  link_to_default_domain        = true
+}
+
+# Outputs
 output "frontdoor_url" {
-  value = azurerm_frontdoor.fd.frontend_endpoints[0].host_name
+  value = azurerm_cdn_frontdoor_endpoint.fd_endpoint.host_name
+}
+
+output "storage_website_url" {
+  value = azurerm_storage_account_static_website.static_site.primary_web_endpoint
 }
