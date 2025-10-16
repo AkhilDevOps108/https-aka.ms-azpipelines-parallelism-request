@@ -9,24 +9,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read      # 👈 remove id-token: write to avoid OIDC
+      contents: read   # 👈 no OIDC, simple secret-based login
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  name: Azure Login (Service Principal)
-  uses: azure/login@v1
-  with:
-    creds:
-      {
-        "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-        "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-        "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-        "tenantId": "${{ secrets.ARM_TENANT_ID }}",
-        "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
-        "resourceManagerEndpointUrl": "https://management.azure.com/",
-        "managementEndpointUrl": "https://management.core.windows.net/"
-      }
+      - name: Azure Login (Service Principal)
+        uses: azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.ARM_TENANT_ID }}",
+              "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+              "resourceManagerEndpointUrl": "https://management.azure.com/",
+              "managementEndpointUrl": "https://management.core.windows.net/"
+            }
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
