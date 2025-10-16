@@ -9,45 +9,50 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read   # No OIDC needed for Service Principal JSON
+      contents: read
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ✅ Login using your single JSON secret
+      # 1️⃣ Azure Login
       - name: Azure Login
+        id: azureLogin
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # ✅ Setup Terraform CLI
+      # 2️⃣ Extract credentials from JSON for Terraform
+      - name: Export Terraform Azure Credentials
+        id: export-creds
+        run: |
+          echo "ARM_CLIENT_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .clientId)" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .clientSecret)" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .subscriptionId)" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r .tenantId)" >> $GITHUB_ENV
+
+      # 3️⃣ Install Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.6.0'
 
-      # ✅ Confirm the login context (optional but useful for debugging)
       - name: Verify Azure Login
         run: az account show
 
-      # ✅ Initialize Terraform
+      # 4️⃣ Terraform Steps
       - name: Terraform Init
         run: terraform init
 
-      # ✅ Validate Terraform configuration
       - name: Terraform Validate
         run: terraform validate
 
-      # ✅ Plan the Terraform deployment
       - name: Terraform Plan
         run: terraform plan -out=tfplan
 
-      # ✅ Apply Terraform plan (deploy infra)
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve tfplan
 
-      # ✅ Display output values (e.g., website URL)
       - name: Show Terraform Outputs
         run: terraform output
