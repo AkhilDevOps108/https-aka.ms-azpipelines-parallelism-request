@@ -34,24 +34,56 @@ resource "azurerm_storage_account_static_website" "static_site" {
   error_404_document = "404.html"
 }
 
-# CDN
-resource "azurerm_cdn_profile" "cdn_profile" {
-  name                = "${var.prefix}-cdn-profile"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku                 = "Standard_Microsoft"
-}
+# ---------------- FRONT DOOR (replaces CDN) ----------------
 
-resource "azurerm_cdn_endpoint" "cdn_endpoint" {
-  name                = "${var.prefix}-cdn-endpoint"
-  profile_name        = azurerm_cdn_profile.cdn_profile.name
+resource "azurerm_frontdoor" "fd" {
+  name                = "${var.prefix}-frontdoor"
   resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_cdn_profile.cdn_profile.location
+  enforce_backend_pools_certificate_name_check = false
 
-  origin {
-    name      = "storageorigin"
-    host_name = azurerm_storage_account.storage.primary_blob_host
+  frontend_endpoint {
+    name                              = "${var.prefix}-frontend"
+    host_name                         = "${var.prefix}-frontdoor.azurefd.net"
+    custom_https_provisioning_enabled = false
+  }
+
+  backend_pool {
+    name = "storage-backend"
+
+    backend {
+      host_header = azurerm_storage_account.storage.primary_web_host
+      address     = azurerm_storage_account.storage.primary_web_host
+      http_port   = 80
+      https_port  = 443
+      weight      = 50
+      priority    = 1
+    }
+
+    load_balancing_name = "lb"
+    health_probe_name   = "hp"
+  }
+
+  backend_pool_load_balancing {
+    name = "lb"
+  }
+
+  backend_pool_health_probe {
+    name = "hp"
+    path = "/"
+  }
+
+  routing_rule {
+    name               = "route1"
+    accepted_protocols  = ["Http", "Https"]
+    patterns_to_match   = ["/*"]
+    frontend_endpoints  = ["${var.prefix}-frontend"]
+    forwarding_configuration {
+      forwarding_protocol = "MatchRequest"
+      backend_pool_name   = "storage-backend"
+    }
   }
 }
 
-
+output "frontdoor_url" {
+  value = azurerm_frontdoor.fd.frontend_endpoints[0].host_name
+}
