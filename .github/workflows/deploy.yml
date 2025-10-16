@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read   # 👈 no OIDC, simple secret-based login
+      contents: read   # no OIDC
 
     steps:
       - name: Checkout Code
@@ -36,4 +36,19 @@ jobs:
 
       - name: Verify Azure Login
         run: az account show
-#
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show Output
+        run: terraform output
